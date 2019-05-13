@@ -221,6 +221,42 @@ public abstract class AbstractJoinIntegrationTest {
     }
 
     /*
+     * Runs the actual test. Checks the result after each input record to ensure fixed processing order.
+     * If an input tuple does not trigger any result, "expectedResult" should contain a "null" entry
+     */
+    void runTestThousandRecords(final List<List<String>> expectedResult) throws Exception {
+
+        IntegrationTestUtils.purgeLocalStreamsState(STREAMS_CONFIG);
+
+        final long startTime = 1902580000000L;
+        for (int i = 0; i < 1000; i++) {
+            producer.send(new ProducerRecord<>(INPUT_TOPIC_LEFT, null, startTime + i * 1000, 1L, String.valueOf(i))).get();
+        }
+
+        for (int i = 0; i < 1000; i++) {
+            if (i % 10 == 0) {
+                producer.send(new ProducerRecord<>(INPUT_TOPIC_RIGHT, null, startTime + i * 1000, 1L, String.valueOf(i))).get();
+            }
+        }
+
+        producer.flush();
+        producer.close();
+
+        try {
+            streams = new KafkaStreams(builder.build(), STREAMS_CONFIG);
+            streams.start();
+
+            for (final List<String> expected : expectedResult) {
+                if (expected != null) {
+                    checkResult(OUTPUT_TOPIC, expected);
+                }
+            }
+        } finally {
+            streams.close();
+        }
+    }
+
+    /*
      * Runs the actual test. Checks the final result only after expected number of records have been consumed.
      */
     void runTest(final String expectedFinalResult) throws Exception {

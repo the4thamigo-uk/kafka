@@ -16,6 +16,7 @@
  */
 package org.apache.kafka.streams.kstream.internals;
 
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.serialization.IntegerSerializer;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.serialization.StringSerializer;
@@ -26,6 +27,7 @@ import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.kstream.JoinWindows;
 import org.apache.kafka.streams.kstream.Joined;
 import org.apache.kafka.streams.kstream.KStream;
+import org.apache.kafka.streams.processor.TimestampExtractor;
 import org.apache.kafka.streams.processor.internals.testutil.LogCaptureAppender;
 import org.apache.kafka.streams.test.ConsumerRecordFactory;
 import org.apache.kafka.test.MockProcessor;
@@ -35,7 +37,13 @@ import org.apache.kafka.test.StreamsTestUtils;
 import org.junit.Test;
 
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Properties;
+import java.util.Set;
 
 import static java.time.Duration.ofMillis;
 import static org.apache.kafka.test.StreamsTestUtils.getMetricByName;
@@ -288,9 +296,19 @@ public class KStreamKStreamJoinTest {
 
     @Test
     public void testWindowingHistorical() {
-        long time = 0L;
+        final long time = 0L;
 
         final StreamsBuilder builder = new StreamsBuilder();
+
+        final Consumed consumed2 = consumed.withTimestampExtractor(
+                new TimestampExtractor() {
+
+                    @Override
+                    public long extract(final ConsumerRecord<Object, Object> record, final long previousTimestamp) {
+                        return Long.parseLong(String.valueOf(record.value()).substring(1)) * 1000;
+                    }
+                });
+
 
         final MockProcessorSupplier<Integer, String> supplier = new MockProcessorSupplier<>();
         final KStream<Integer, String> stream1 = builder.stream(topic1, consumed);
@@ -306,9 +324,9 @@ public class KStreamKStreamJoinTest {
             // push 1000 items onto the primary stream and 100 onto the other
             final List<String> expected = new ArrayList<>();
             for (long i = 0; i < 1000; i++) {
-                driver.pipeInput(recordFactory.create(topic1, 0, String.format("X%d", i), time + i * 1000));
+                driver.pipeInput(recordFactory.create(topic1, 0, String.format("X%d", i)));
                 if (i % 10 == 0) {
-                    driver.pipeInput(recordFactory.create(topic2, 0, String.format("Y%d", i), time + i * 1000));
+                    driver.pipeInput(recordFactory.create(topic2, 0, String.format("Y%d", i)));
                 }
                 expected.add(String.format("0:X%d+Y%d", i, (i / 10) * 10));
             }

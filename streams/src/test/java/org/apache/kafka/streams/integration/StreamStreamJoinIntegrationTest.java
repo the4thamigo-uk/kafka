@@ -28,6 +28,8 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -83,6 +85,22 @@ public class StreamStreamJoinIntegrationTest extends AbstractJoinIntegrationTest
         leftStream.join(rightStream, valueJoiner, JoinWindows.of(ofSeconds(10))).to(OUTPUT_TOPIC);
 
         runTest(expectedResult);
+    }
+
+    @Test
+    public void testHistoricalJoin() throws Exception {
+        STREAMS_CONFIG.put(StreamsConfig.APPLICATION_ID_CONFIG, appID + "-inner");
+
+        final List<List<String>> expectedResult = new ArrayList<List<String>>();
+        final List<String> expected = new ArrayList<>();
+        for (int i = 0; i < 1000; i++) {
+            expected.add(String.format("%d-%d", i, (i / 10) * 10));
+        }
+
+        leftStream.join(rightStream, valueJoiner, JoinWindows.of(Duration.ZERO).before(ofSeconds(9)).grace(Duration.ofSeconds(20))).to(OUTPUT_TOPIC);
+
+        expectedResult.add(expected);
+        runTestThousandRecords(expectedResult);
     }
 
     @Test
