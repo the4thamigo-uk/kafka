@@ -34,11 +34,8 @@ import org.apache.kafka.test.MockValueJoiner;
 import org.apache.kafka.test.StreamsTestUtils;
 import org.junit.Test;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Properties;
-import java.util.Set;
+import java.time.Duration;
+import java.util.*;
 
 import static java.time.Duration.ofMillis;
 import static org.apache.kafka.test.StreamsTestUtils.getMetricByName;
@@ -286,6 +283,41 @@ public class KStreamKStreamJoinTest {
             }
 
             processor.checkAndClearProcessResult("0:X0+YYY0", "0:X0+YYY0", "0:XX0+YYY0", "1:X1+YYY1", "1:X1+YYY1", "1:XX1+YYY1");
+        }
+    }
+
+    @Test
+    public void testWindowingHistorical() {
+        long time = 0L;
+
+        final StreamsBuilder builder = new StreamsBuilder();
+
+        final MockProcessorSupplier<Integer, String> supplier = new MockProcessorSupplier<>();
+        final KStream<Integer, String> stream1 = builder.stream(topic1, consumed);
+        final KStream<Integer, String> stream2 = builder.stream(topic2, consumed);
+
+        final KStream<Integer, String> joined = stream1.join(stream2,
+                MockValueJoiner.TOSTRING_JOINER,
+                JoinWindows.of(Duration.ZERO).before(Duration.parse("PT9S")).grace(Duration.parse("PT10S")),
+                Joined.with(Serdes.Integer(), Serdes.String(), Serdes.String()));
+        joined.process(supplier);
+
+        try (final TopologyTestDriver driver = new TopologyTestDriver(builder.build(), props, time)) {
+            // push 1000 items onto the primary stream and 100 onto the other
+            final List<String> expected = new ArrayList<>();
+            for (long i = 0; i < 1000; i++) {
+                driver.pipeInput(recordFactory.create(topic1, 0, String.format("X%d", i), time + i * 1000));
+                if (i % 10 == 0) {
+                    driver.pipeInput(recordFactory.create(topic2, 0, String.format("Y%d", i), time + i * 1000));
+                }
+                expected.add(String.format("0:X%d+Y%d", i, (i / 10) * 10));
+            }
+
+            final MockProcessor<Integer, String> processor = supplier.theCapturedProcessor();
+
+            final String[] expectedArr = new String[expected.size()];
+            expected.toArray(expectedArr);
+            processor.checkAndClearProcessResult(expectedArr);
         }
     }
 
