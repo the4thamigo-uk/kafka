@@ -90,6 +90,8 @@ public class StreamStreamJoinIntegrationTest extends AbstractJoinIntegrationTest
     @Test
     public void testHistoricalJoin() throws Exception {
         STREAMS_CONFIG.put(StreamsConfig.APPLICATION_ID_CONFIG, appID + "-inner");
+        STREAMS_CONFIG.put(StreamsConfig.MAX_TASK_IDLE_MS_CONFIG, 1000);
+
 
         final List<List<String>> expectedResult = new ArrayList<List<String>>();
         final List<String> expected = new ArrayList<>();
